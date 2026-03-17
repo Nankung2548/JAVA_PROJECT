@@ -1,6 +1,6 @@
 package com.lab.Project_JAVA;
 
-import java.util.List;
+import java.util.*;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -8,168 +8,101 @@ import org.hibernate.query.Query;
 
 public class RunQuery {
 
-	@SuppressWarnings({ "unchecked", "deprecation", "rawtypes" })
-	public static void main(String[] args) {
+    @SuppressWarnings({ "unchecked", "deprecation", "rawtypes" })
+    public static void main(String[] args) {
 
-		SessionFactory sf = HibernateConnection.doHibernateConnection();
-		Session session = sf.openSession();
-		Transaction tx = session.beginTransaction();
+        SessionFactory sf = HibernateConnection.doHibernateConnection();
+        Session session = sf.openSession();
+        Transaction tx = session.beginTransaction();
 
-		try {
+        try {
+            // 1. งานที่ซ่อมเสร็จไว (ไม่เกิน 1 สัปดาห์)
+            System.out.println("\n===== 1. รายการงานซ่อมด่วนที่เสร็จภายใน 7 วัน =====");
+            String hql1 = "SELECT r.jobID, r.modelName, function('DATEDIFF', r.appoinmentDate, r.dateReceived) " +
+                          "FROM RepairJob r WHERE function('DATEDIFF', r.appoinmentDate, r.dateReceived) < 7";
+            List<Object[]> list1 = session.createQuery(hql1).list();
+            for (Object[] row : list1) {
+                System.out.println("รหัสงาน: " + row[0] + " | รุ่น: " + row[1] + " | ใช้เวลาจริง: " + row[2] + " วัน");
+            }
 
-			// 1 หางานซ่อมที่ใช้อะไหล่มากที่สุด
-			System.out.println("\n========== ข้อ 1 งานซ่อมที่ใช้อะไหล่มากที่สุด ==========\n");
+            // 2. สรุปภาพรวมงานในระบบ
+            System.out.println("\n===== 2. สรุปจำนวนเครื่องซ่อมแยกตามประเภทอุปกรณ์ =====");
+            String hql2 = "SELECT r.typeName, COUNT(r.jobID) FROM RepairJob r GROUP BY r.typeName";
+            List<Object[]> list2 = session.createQuery(hql2).list();
+            for (Object[] row : list2) {
+                System.out.println("ประเภทอุปกรณ์: " + row[0] + " | จำนวน: " + row[1] + " เครื่อง");
+            }
 
-			String hql1 = "SELECT r.jobID, SUM(q.amount) " + "FROM Quotation q " + "JOIN q.repairJob r "
-					+ "GROUP BY r.jobID " + "ORDER BY SUM(q.amount) DESC";
+            // 3. ข้อมูลการมอบหมายงาน
+            System.out.println("\n===== 3. รายชื่อช่างที่รับผิดชอบดูแลงานซ่อมปัจจุบัน =====");
+            String hql3 = "SELECT r.jobID, t.TechName FROM RepairJob r JOIN r.technician t";
+            List<Object[]> list3 = session.createQuery(hql3).list();
+            for (Object[] row : list3) {
+                System.out.println("งานเลขที่: " + row[0] + " | ช่างผู้ดูแล: " + row[1]);
+            }
 
-			Query<Object[]> query1 = session.createQuery(hql1, Object[].class);
-			List<Object[]> rows1 = query1.getResultList();
+            // 4. ตรวจสอบประวัติการใช้บริการของลูกค้า
+            System.out.println("\n===== 4. รายชื่อลูกค้าทั้งหมดและประวัติการส่งซ่อมเครื่อง =====");
+            String hql4 = "SELECT c.customerName, r.jobID FROM Customer c LEFT JOIN RepairJob r ON c.customerID = r.customer.customerID";
+            List<Object[]> list4 = session.createQuery(hql4).list();
+            for (Object[] row : list4) {
+                System.out.println("ลูกค้า: " + row[0] + " | รหัสงานซ่อม: " + (row[1] != null ? row[1] : "ยังไม่เคยส่งซ่อม"));
+            }
 
-			for (Object[] row : rows1) {
-				System.out.println("JobID: " + row[0] + " PartsUsed: " + row[1]);
-			}
+            // 5. รายได้รวมของศูนย์ซ่อม
+            System.out.println("\n===== 5. ยอดรายได้รวมทั้งหมดจากใบเสร็จรับเงิน =====");
+            String hql5 = "SELECT SUM(rc.totalPrice) FROM Receipt rc";
+            Double totalIncome = (Double) session.createQuery(hql5).uniqueResult();
+            System.out.println(">>> รายได้รวมสะสมทั้งสิ้น: " + (totalIncome != null ? totalIncome : 0) + " บาท");
 
-			// 2 หาอะไหล่ที่ราคาสูงกว่าค่าเฉลี่ย
-			System.out.println("\n========== ข้อ 2 อะไหล่ที่ราคาสูงกว่าค่าเฉลี่ย ==========\n");
+            // 6. ตรวจสอบราคาสินค้าคงคลัง
+            System.out.println("\n===== 6. ตรวจสอบราคาอะไหล่ชิ้นที่แพงที่สุดในสต็อก =====");
+            String hql6 = "SELECT MAX(s.price) FROM SparePart s";
+            Double maxPrice = (Double) session.createQuery(hql6).uniqueResult();
+            System.out.println("ราคาอะไหล่สูงสุด: " + (maxPrice != null ? maxPrice : 0) + " บาท");
 
-			String hql2 = "FROM SparePart s " + "WHERE s.price > (SELECT AVG(p.price) FROM SparePart p)";
+            // 7. จัดลำดับความสำคัญของงาน
+            System.out.println("\n===== 7. ตรวจสอบวันนัดหมายคิวซ่อมที่ใกล้ที่สุด =====");
+            String hql7 = "SELECT MIN(r.appoinmentDate) FROM RepairJob r WHERE r.status != 'เสร็จสิ้น'";
+            Calendar minDate = (Calendar) session.createQuery(hql7).uniqueResult();
+            System.out.println("วันนัดหมายเร็วที่สุดคือ: " + (minDate != null ? minDate.getTime() : "ไม่มีงานค้าง"));
 
-			Query<SparePart> query2 = session.createQuery(hql2, SparePart.class);
-			List<SparePart> rows2 = query2.getResultList();
+            // 8. ข้อมูลติดต่อเพื่อติดตามงาน
+            System.out.println("\n===== 8. รายการงานซ่อมปี 2026 และเบอร์โทรศัพท์ลูกค้า =====");
+            String hql8 = "SELECT r.jobID, c.customerName, c.customerPhone " +
+                          "FROM RepairJob r JOIN r.customer c " +
+                          "WHERE function('YEAR', r.dateReceived) = 2026";
+            List<Object[]> list8 = session.createQuery(hql8).list();
+            for (Object[] row : list8) {
+                System.out.println("JobID: " + row[0] + " | ลูกค้า: " + row[1] + " | เบอร์โทรศัพท์: " + row[2]);
+            }
 
-			for (SparePart s : rows2) {
-				System.out.println("PartName: " + s.getPartName() + " Price: " + s.getPrice());
-			}
+            // 9. ค้นหางานตามช่วงเวลา
+            System.out.println("\n===== 9. งานซ่อมที่รับเครื่องตั้งแต่วันที่ 1 มีนาคม 2026 เป็นต้นไป =====");
+            Calendar filterDate = Calendar.getInstance();
+            filterDate.set(2026, Calendar.MARCH, 1);
+            String hql9 = "FROM RepairJob r WHERE r.dateReceived >= :startDate";
+            List<RepairJob> list9 = session.createQuery(hql9, RepairJob.class)
+                                           .setParameter("startDate", filterDate)
+                                           .list();
+            for (RepairJob r : list9) {
+                System.out.println("วันที่รับ: " + r.getDateReceived().getTime() + " | JobID: " + r.getJobID() + " | รุ่น: " + r.getModelName());
+            }
 
-			// 3 แสดงสถานะงานด้วย CASE
-			System.out.println("\n========== ข้อ 3 แสดงสถานะงานแบบ CASE ==========\n");
+            // 10. วิเคราะห์พื้นที่ให้บริการ
+            System.out.println("\n===== 10. สรุปจังหวัดที่มีกลุ่มลูกค้าหนาแน่น (มากกว่า 1 คน) =====");
+            String hql10 = "SELECT c.address, COUNT(c.customerID) FROM Customer c GROUP BY c.address HAVING COUNT(c.customerID) > 1";
+            List<Object[]> list10 = session.createQuery(hql10).list();
+            for (Object[] row : list10) {
+                System.out.println("จังหวัด: " + row[0] + " | จำนวนลูกค้าปัจจุบัน: " + row[1] + " ราย");
+            }
 
-			String hql3 = "SELECT r.jobID, " + "CASE " + "WHEN r.status = 'เสร็จสิ้น' THEN 'Complete' "
-					+ "WHEN r.status = 'กำลังซ่อม' THEN 'Working' " + "ELSE 'Waiting' " + "END " + "FROM RepairJob r";
-
-			Query<Object[]> query3 = session.createQuery(hql3, Object[].class);
-			List<Object[]> rows3 = query3.getResultList();
-
-			for (Object[] row : rows3) {
-				System.out.println("JobID: " + row[0] + " Status: " + row[1]);
-			}
-
-			// 4 หาลูกค้าที่มีงานซ่อมมากที่สุด
-			System.out.println("\n========== ข้อ 4 ลูกค้าที่มีงานซ่อมมากที่สุด ==========\n");
-
-			String hql4 = "SELECT c.customerName, COUNT(r.jobID) " + "FROM RepairJob r " + "JOIN r.customer c "
-					+ "GROUP BY c.customerName " + "ORDER BY COUNT(r.jobID) DESC";
-
-			Query<Object[]> query4 = session.createQuery(hql4, Object[].class);
-			List<Object[]> rows4 = query4.getResultList();
-
-			for (Object[] row : rows4) {
-				System.out.println("Customer: " + row[0] + " Jobs: " + row[1]);
-			}
-
-			// 5 หางานซ่อมที่ยังไม่มีรีวิว
-			System.out.println("\n========== ข้อ 5 งานซ่อมที่ยังไม่มีรีวิว ==========\n");
-
-			String hql5 = "FROM RepairJob r " + "WHERE NOT EXISTS "
-					+ "(SELECT rv.ReviewID FROM Review rv WHERE rv.repairJob = r)";
-
-			Query<RepairJob> query5 = session.createQuery(hql5, RepairJob.class);
-			List<RepairJob> rows5 = query5.getResultList();
-
-			for (RepairJob r : rows5) {
-				System.out.println("JobID: " + r.getJobID());
-			}
-
-			// 6 หาอะไหล่ที่ถูกใช้งาน
-			System.out.println("\n========== ข้อ 6 อะไหล่ที่ถูกใช้งาน ==========\n");
-
-			String hql6 = "SELECT DISTINCT s.partName " + "FROM Quotation q " + "JOIN q.sparePart s";
-
-			Query<String> query6 = session.createQuery(hql6, String.class);
-			List<String> rows6 = query6.getResultList();
-
-			for (String name : rows6) {
-				System.out.println("Used Part: " + name);
-			}
-
-			// 7 แสดงระดับค่าอะไหล่ของงานซ่อม
-			System.out.println("\n========== ข้อ 7 ระดับค่าอะไหล่ของงานซ่อม ==========\n");
-
-			String hql7 = "SELECT r.jobID, "
-			        + "SUM(s.price * q.amount), "
-			        + "CASE "
-			        + "WHEN SUM(s.price * q.amount) >= 5000 THEN 'High Cost' "
-			        + "WHEN SUM(s.price * q.amount) >= 2000 THEN 'Medium Cost' "
-			        + "ELSE 'Low Cost' "
-			        + "END "
-			        + "FROM Quotation q "
-			        + "JOIN q.repairJob r "
-			        + "JOIN q.sparePart s "
-			        + "GROUP BY r.jobID";
-
-			Query<Object[]> query7 = session.createQuery(hql7, Object[].class);
-			List<Object[]> rows7 = query7.getResultList();
-
-			for (Object[] row : rows7) {
-			    System.out.println("JobID: " + row[0] + " TotalCost: " + row[1] + " Level: " + row[2]);
-			}
-			
-			// 8 ช่างที่เสนอใบเสนอราคามากกว่า 1 ครั้ง
-			System.out.println("\n========== ข้อ 8 ช่างที่เสนอใบเสนอราคามากกว่า 1 ==========\n");
-
-			String hql8 = "SELECT t, COUNT(q) "
-			        + "FROM Technician t "
-			        + "LEFT JOIN Quotation q ON q.technician = t "
-			        + "GROUP BY t "
-			        + "HAVING COUNT(q) > 1";
-
-			Query<Object[]> query8 = session.createQuery(hql8, Object[].class);
-			List<Object[]> rows8 = query8.getResultList();
-
-			for (Object[] row : rows8) {
-			    Technician t = (Technician) row[0];
-			    System.out.println("Technician: " + t.getTechName() + " Quotations: " + row[1]);
-			}
-			
-			// 9 งานซ่อมที่มีรีวิวคะแนนสูงสุด
-			System.out.println("\n========== ข้อ 9 งานซ่อมที่มีรีวิวคะแนนสูงสุด ==========\n");
-
-			String hql9 = "SELECT r.jobID, rv.rating "
-			        + "FROM Review rv "
-			        + "JOIN rv.repairJob r "
-			        + "WHERE rv.rating = (SELECT MAX(r2.rating) FROM Review r2)";
-			
-			Query<Object[]> query9 = session.createQuery(hql9, Object[].class);
-			List<Object[]> rows9 = query9.getResultList();
-
-			for (Object[] row : rows9) {
-			    System.out.println("JobID: " + row[0] + " Rating: " + row[1]);
-			}
-
-			// 10 จำนวนอะไหล่ทั้งหมดที่ใช้ในแต่ละงานซ่อม
-			System.out.println("\n========== ข้อ 10 จำนวนอะไหล่ในแต่ละงาน ==========\n");
-
-			String hql10 = "SELECT r.jobID, SUM(q.amount) "
-			        + "FROM RepairJob r "
-			        + "LEFT JOIN Quotation q ON q.repairJob = r "
-			        + "GROUP BY r.jobID";
-
-			Query<Object[]> query10 = session.createQuery(hql10, Object[].class);
-			List<Object[]> rows10 = query10.getResultList();
-
-			for (Object[] row : rows10) {
-			    System.out.println("JobID: " + row[0] + " TotalParts: " + row[1]);
-			}
-
-			tx.commit();
-			session.close();
-
-			System.out.println("\n========== Query Completed ==========");
-
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
-	}
+            tx.commit();
+        } catch (Exception e) {
+            if (tx != null) tx.rollback();
+            e.printStackTrace();
+        } finally {
+            session.close();
+        }
+    }
 }
